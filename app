@@ -1,50 +1,158 @@
-import eventlet
-eventlet.monkey_patch()
+# Mini Facebook-like Web App using Flask
+# Features: User registration, login, logout, create posts, feed display
+# Simple SQLite database (no ORM for simplicity)
 
-from flask import Flask, render_template_string, request, redirect, session
-from flask_socketio import SocketIO, emit
+from flask import Flask, render_template_string, request, redirect, session, url_for
+import sqlite3
+from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = "secret"
+app.secret_key = "supersecretkey"
 
-socketio = SocketIO(app, cors_allowed_origins="*")
+DB = "social.db"
 
-chat_page = """
-<h2>Messenger - {{user}}</h2>
+# -------------------- DB SETUP --------------------
+def init_db():
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
 
-<div id="chat" style="height:300px; overflow:auto; border:1px solid black;"></div>
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE,
+        password TEXT
+    )
+    """)
 
-<input id="message" placeholder="Type message...">
-<button onclick="sendMessage()">Send</button>
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user TEXT,
+        content TEXT,
+        created_at TEXT
+    )
+    """)
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
-<script>
-var socket = io();
+    conn.commit()
+    conn.close()
 
-socket.on("chat_message", function(msg){
-    var chat = document.getElementById("chat");
-    chat.innerHTML += "<p>" + msg + "</p>";
-});
+init_db()
 
-function sendMessage(){
-    var input = document.getElementById("message");
-    socket.emit("chat_message", "{{user}}: " + input.value);
-    input.value = "";
-}
-</script>
+# -------------------- HELPERS --------------------
+def get_db():
+    return sqlite3.connect(DB)
 
-<a href="/home">Back</a>
-"""
+# -------------------- ROUTES --------------------
 
-@app.route("/chat")
-def chat():
+@app.route('/')
+def index():
     if "user" not in session:
-        return redirect("/")
-    return render_template_string(chat_page, user=session["user"])
+        return redirect('/login')
 
-@socketio.on("chat_message")
-def handle_message(msg):
-    emit("chat_message", msg, broadcast=True)
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT user, content, created_at FROM posts ORDER BY id DESC")
+    posts = c.fetchall()
+    conn.close()
 
-if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=10000)
+    html = """
+    <h1>Mini Facebook</h1>
+    <p>Logged in as {{user}} | <a href='/logout'>Logout</a></p>
+
+    <form method='POST' action='/post'>
+        <textarea name='content' required></textarea><br>
+        <button type='submit'>Post</button>
+    </form>
+
+    <hr>
+
+    {% for p in posts %}
+        <div style='border:1px solid #ccc; padding:10px; margin:10px;'>
+            <b>{{p[0]}}</b><br>
+            {{p[1]}}<br>
+            <small>{{p[2]}}</small>
+        </div>
+    {% endfor %}
+    """
+
+    return render_template_string(html, posts=posts, user=session["user"])
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+
+        conn = get_db()
+        c = conn.cursor()
+        try:
+            c.execute("INSERT INTO users (username, password) VALUES (?,?)", (username, password))
+            conn.commit()
+        except:
+            return "User already exists"
+        conn.close()
+        return redirect('/login')
+
+    return """
+    <h2>Register</h2>
+    <form method='POST'>
+        <input name='username' placeholder='username' required>
+        <input name='password' type='password' placeholder='password' required>
+        <button>Register</button>
+    </form>
+    <a href='/login'>Login</a>
+    """
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+
+        conn = get_db()
+        c = conn.cursor()
+        c.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password))
+        user = c.fetchone()
+        conn.close()
+
+        if user:
+            session['user'] = username
+            return redirect('/')
+        return "Invalid login"
+
+    return """
+    <h2>Login</h2>
+    <form method='POST'>
+        <input name='username' placeholder='username' required>
+        <input name='password' type='password' placeholder='password' required>
+        <button>Login</button>
+    </form>
+    <a href='/register'>Register</a>
+    """
+
+@app.route('/logout')
+def logout():
+    session.pop('user', None)
+    return redirect('/login')
+
+@app.route('/post', methods=['POST'])
+def post():
+    if "user" not in session:
+        return redirect('/login')
+
+    content = request.form['content']
+    user = session['user']
+    created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("INSERT INTO posts (user, content, created_at) VALUES (?,?,?)",
+              (user, content, created_at))
+    conn.commit()
+    conn.close()
+
+    return redirect('/')
+
+# -------------------- RUN --------------------
+if __name__ == '__main__':
+    app.run(debug=True)
