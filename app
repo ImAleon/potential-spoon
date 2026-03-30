@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, render_template_string, request, redirect, session
 from flask_socketio import SocketIO, send
 import sqlite3
