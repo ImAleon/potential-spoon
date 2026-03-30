@@ -15,6 +15,10 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(100), unique=True, nullable=False)
     password = db.Column(db.String(150))
+    
+    existing_user = User.query.filter_by(username=request.form['username']).first()
+        if existing_user:
+            return render_template('register.html', error="Username already taken")
 
 class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -38,11 +42,24 @@ def home():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        user = User(username=request.form['username'],
-                    password=request.form['password'])
+
+        existing_user = User.query.filter_by(
+            username=request.form['username']
+        ).first()
+
+        if existing_user:
+            return "Username already exists. Try another."
+
+        user = User(
+            username=request.form['username'],
+            password=request.form['password']
+        )
+
         db.session.add(user)
         db.session.commit()
+
         return redirect(url_for('login'))
+
     return render_template('register.html')
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -58,9 +75,10 @@ def login():
 @login_required
 def feed():
     if request.method == 'POST':
-        post = Post(content=request.form['content'], user_id=current_user.id)
+        post = Post(content=request.form['content'], user=current_user)
         db.session.add(post)
         db.session.commit()
+        return redirect(url_for('feed'))  # important
 
     posts = Post.query.order_by(Post.id.desc()).all()
     return render_template('feed.html', posts=posts, user=current_user)
