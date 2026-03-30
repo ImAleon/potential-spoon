@@ -1,19 +1,158 @@
-{% extends "base.html" %}
-{% block content %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Feed</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f0f2f5;
+            margin: 0;
+        }
 
-<p>Welcome, {{ user.username }}!</p>
-<a href="/logout">Logout</a>
+        .chat-container {
+            width: 400px;
+            height: 90vh;
+            margin: 20px auto;
+            background: white;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
 
-<h3>Create Message</h3>
-<form method="POST">
-    <input name="content" placeholder="What's on your mind?" required>
-    <button type="submit">Send</button>
-</form>
+        .chat-header {
+            padding: 15px;
+            background: #0084ff;
+            color: white;
+            font-weight: bold;
+        }
 
-<h3>Log</h3>
-{% for post in posts %}
-	<hr>
-    <p><b>{{ post.user.username if post.user else "Unknown" }}</b>: {{ post.content }}</p>
-{% endfor %}
+        .chat-box {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
 
-{% endblock %}
+        .message {
+            padding: 10px 14px;
+            margin: 6px 0;
+            border-radius: 18px;
+            max-width: 70%;
+            display: inline-block;
+            position: relative;
+            word-wrap: break-word;
+        }
+
+        .my-message {
+            background: #0084ff;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 5px;
+        }
+
+        .other-message {
+            background: #e4e6eb;
+            color: black;
+            align-self: flex-start;
+            border-bottom-left-radius: 5px;
+        }
+
+        .username {
+            font-size: 11px;
+            opacity: 0.6;
+            margin-bottom: 3px;
+        }
+
+        .timestamp {
+            font-size: 10px;
+            opacity: 0.5;
+            margin-top: 5px;
+            text-align: right;
+        }
+
+        .chat-input {
+            display: flex;
+            padding: 10px;
+            border-top: 1px solid #ddd;
+            background: #fafafa;
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 10px;
+            border-radius: 20px;
+            border: 1px solid #ccc;
+            outline: none;
+        }
+
+        .chat-input button {
+            margin-left: 10px;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 20px;
+            background: #0084ff;
+            color: white;
+            cursor: pointer;
+        }
+
+        .chat-input button:hover {
+            background: #006fd6;
+        }
+
+        .logout {
+            text-align: center;
+            padding: 10px;
+            font-size: 12px;
+        }
+
+        .logout a {
+            text-decoration: none;
+            color: #888;
+        }
+
+        .logout a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+<div class="chat-container">
+
+    <div class="chat-header">
+        Welcome, {{ user.username }}
+    </div>
+
+    <div class="chat-box">
+        {% for post in posts %}
+            <div class="message 
+                {% if post.user.id == user.id %}my-message{% else %}other-message{% endif %}">
+                
+                <div class="username">{{ post.user.username }}</div>
+                {{ post.content }}
+
+                {% if post.timestamp %}
+                    <div class="timestamp">
+                        {{ post.timestamp.strftime('%H:%M') }}
+                    </div>
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+
+    <form method="POST" class="chat-input">
+        <input type="text" name="content" placeholder="Type a message..." required>
+        <button type="submit">Send</button>
+    </form>
+
+    <div class="logout">
+        <a href="{{ url_for('logout') }}">Logout</a>
+    </div>
+
+</div>
+
+</body>
+</html>
