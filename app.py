@@ -11,14 +11,10 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 
 # ---------------- MODELS ----------------
-class User(db.Model):
+class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(100), unique=True, nullable=False)
     password = db.Column(db.String(150))
-    
-    existing_user = User.query.filter_by(username=request.form['username']).first()
-        if existing_user:
-            return render_template('register.html', error="Username already taken")
 
 class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -48,7 +44,7 @@ def register():
         ).first()
 
         if existing_user:
-            return "Username already exists. Try another."
+            return render_template('register.html', error="Username already taken")
 
         user = User(
             username=request.form['username'],
