@@ -12,7 +12,7 @@
 
 <h3>Log</h3>
 {% for post in posts %}
-    <p>🧑 User {{ post.user_id }}: {{ post.content }}</p>
+    <p>🧑 {{ post.user.username }}: {{ post.content }}</p>
 {% endfor %}
 
 {% endblock %}
