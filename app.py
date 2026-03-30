@@ -11,15 +11,17 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 
 # ---------------- MODELS ----------------
-class User(UserMixin, db.Model):
+class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(150), unique=True)
-    password = db.Column(db.String(150))
+    username = db.Column(db.String(100), unique=True, nullable=False)
+    password = db.Column(db.String(100))
 
 class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    content = db.Column(db.String(500))
-    user_id = db.Column(db.Integer)
+    content = db.Column(db.String(200))
+    
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))  # link to User
+    user = db.relationship('User', backref='posts')  # THIS is important
 
 # ---------------- LOGIN ----------------
 @login_manager.user_loader
