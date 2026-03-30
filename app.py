@@ -1,50 +1,76 @@
-import eventlet
-eventlet.monkey_patch()
-
-from flask import Flask, render_template_string, request, redirect, session
-from flask_socketio import SocketIO, emit
+from flask import Flask, render_template, request, redirect, url_for
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 
 app = Flask(__name__)
-app.secret_key = "secret"
+app.config['SECRET_KEY'] = 'secretkey123'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.sqlite3'
 
-socketio = SocketIO(app, cors_allowed_origins="*")
+db = SQLAlchemy(app)
+login_manager = LoginManager()
+login_manager.init_app(app)
 
-chat_page = """
-<h2>Messenger - {{user}}</h2>
+# ---------------- MODELS ----------------
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(150), unique=True)
+    password = db.Column(db.String(150))
 
-<div id="chat" style="height:300px; overflow:auto; border:1px solid black;"></div>
+class Post(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    content = db.Column(db.String(500))
+    user_id = db.Column(db.Integer)
 
-<input id="message" placeholder="Type message...">
-<button onclick="sendMessage()">Send</button>
+# ---------------- LOGIN ----------------
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
-<script>
-var socket = io();
+# ---------------- ROUTES ----------------
+@app.route('/')
+def home():
+    if current_user.is_authenticated:
+        return redirect(url_for('feed'))
+    return redirect(url_for('login'))
 
-socket.on("chat_message", function(msg){
-    var chat = document.getElementById("chat");
-    chat.innerHTML += "<p>" + msg + "</p>";
-});
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        user = User(username=request.form['username'],
+                    password=request.form['password'])
+        db.session.add(user)
+        db.session.commit()
+        return redirect(url_for('login'))
+    return render_template('register.html')
 
-function sendMessage(){
-    var input = document.getElementById("message");
-    socket.emit("chat_message", "{{user}}: " + input.value);
-    input.value = "";
-}
-</script>
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        user = User.query.filter_by(username=request.form['username']).first()
+        if user and user.password == request.form['password']:
+            login_user(user)
+            return redirect(url_for('feed'))
+    return render_template('login.html')
 
-<a href="/home">Back</a>
-"""
+@app.route('/feed', methods=['GET', 'POST'])
+@login_required
+def feed():
+    if request.method == 'POST':
+        post = Post(content=request.form['content'], user_id=current_user.id)
+        db.session.add(post)
+        db.session.commit()
 
-@app.route("/chat")
-def chat():
-    if "user" not in session:
-        return redirect("/")
-    return render_template_string(chat_page, user=session["user"])
+    posts = Post.query.order_by(Post.id.desc()).all()
+    return render_template('feed.html', posts=posts, user=current_user)
 
-@socketio.on("chat_message")
-def handle_message(msg):
-    emit("chat_message", msg, broadcast=True)
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
 
-if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=10000)
+# ---------------- RUN ----------------
+if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
+    app.run(debug=True)
