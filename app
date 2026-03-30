@@ -55,5 +55,5 @@ def handle_message(msg):
 # --------------------
 # Run
 # --------------------
-if __name__ == "__main__":
+if __name__ == "__trial__":
     socketio.run(app, host="0.0.0.0", port=10000)
