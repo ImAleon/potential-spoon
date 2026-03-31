@@ -30,6 +30,7 @@ class Post(db.Model):
     })
 
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     user = db.relationship('User', backref='posts')
 
 # ---------------- LOGIN ----------------
@@ -38,6 +39,41 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 # ---------------- ROUTES ----------------
+@app.route('/send_message', methods=['POST'])
+def send_message():
+    data = request.get_json()
+    content = data.get('content')
+
+    if not content:
+        return jsonify({'success': False})
+
+    new_post = Post(
+        content=content,
+        user_id=current_user.id,
+        timestamp=datetime.utcnow()
+    )
+
+    db.session.add(new_post)
+    db.session.commit()
+
+    return jsonify({'success': True})
+
+@app.route('/get_posts')
+def get_posts():
+    posts = Post.query.order_by(Post.timestamp.asc()).all()
+
+    return jsonify({
+        "posts": [
+            {
+                "user_id": p.user.id,
+                "username": p.user.username,
+                "content": p.content,
+                "time": p.timestamp.strftime('%H:%M')
+            }
+            for p in posts
+        ]
+    })
+
 @app.route('/react/<int:post_id>', methods=['POST'])
 def react(post_id):
     data = request.get_json()
