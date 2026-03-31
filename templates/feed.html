@@ -4,6 +4,23 @@
     <title>Feed</title>
     <style>
         * { box-sizing: border-box; }
+		
+		.post.my-message .username {
+			display: none;
+		}
+		
+		.post.my-message {
+			justify-content: flex-end;
+		}
+
+		.post.my-message .message-content {
+			background: linear-gradient(135deg, #4facfe, #00f2fe);
+			color: white;
+		}
+		
+		.post:not(.my-message) {
+			justify-content: flex-start;
+		}
 
         body {
             font-family: 'Segoe UI', Arial, sans-serif;
@@ -56,13 +73,9 @@
         }
 
         .post {
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-            padding: 10px 12px;
-            border-radius: 16px;
-            transition: background 0.2s;
-        }
+			display: flex;
+			gap: 10px;
+		}
 
         .post:hover {
             background: #f7f9fc;
@@ -199,7 +212,7 @@
 
     <div class="chat-box">
         {% for post in posts %}
-            <div class="post">
+            <div class="post {% if post.user.id == user.id %}my-message{% endif %}">
                 <div>
                     <div class="username">{{ post.user.username }}</div>
                     <div class="message-content">
@@ -219,7 +232,7 @@
         {% endfor %}
     </div>
 
-    <form method="POST" class="chat-input">
+    <form id="chat-form" class="chat-input">
         <input type="text" name="content" placeholder="Type a message... 😊" required>
         <button type="submit">Send</button>
     </form>
@@ -248,6 +261,79 @@ document.querySelectorAll('.reaction-btn').forEach(btn => {
             }
         });
     });
+});
+</script>
+
+<script>
+const chatBox = document.querySelector('.chat-box');
+
+function loadMessages() {
+    fetch('/get_posts')
+    .then(res => res.json())
+    .then(data => {
+        chatBox.innerHTML = '';
+
+        data.posts.forEach(post => {
+            const isMe = post.user_id === {{ user.id }};
+
+            const postDiv = document.createElement('div');
+            postDiv.className = 'post ' + (isMe ? 'my-message' : '');
+
+            postDiv.innerHTML = `
+                <div>
+                    ${!isMe ? `<div class="username">${post.username}</div>` : ''}
+                    <div class="message-content">${post.content}</div>
+                    <div class="timestamp">${post.time}</div>
+                </div>
+            `;
+
+            chatBox.appendChild(postDiv);
+        });
+
+        chatBox.scrollTop = chatBox.scrollHeight;
+    });
+}
+
+// reload every 1 second
+setInterval(loadMessages, 1000);
+
+// initial load
+loadMessages();
+</script>
+
+<script>
+const chatBox = document.querySelector('.chat-box');
+
+// scroll to bottom on load
+window.onload = () => {
+    chatBox.scrollTop = chatBox.scrollHeight;
+};
+</script>
+
+<script>
+const form = document.getElementById('chat-form');
+const input = form.querySelector('input');
+
+form.addEventListener('submit', function(e) {
+    e.preventDefault(); // 🚫 stop page refresh
+
+    const message = input.value.trim();
+    if (!message) return;
+
+    fetch('/send_message', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ content: message })
+    })
+    .then(res => res.json())
+	.then(data => {
+		if (data.success) {
+        input.value = '';
+        loadMessages(); // ✅ THIS makes it instant
+		}
+	});
 });
 </script>
 
