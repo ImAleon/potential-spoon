@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Chatting Site</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    *{box-sizing:border-box;font-family:Segoe UI,sans-serif;}
+
+    body{
+      margin:0;height:100vh;
+      background:radial-gradient(circle at top,#050814,#020617);
+      display:flex;align-items:center;justify-content:center;
+      color:#fff;
+    }
+
+    #auth{
+      width:360px;padding:25px;border-radius:18px;
+      background:rgba(255,255,255,0.08);
+      backdrop-filter:blur(14px);
+    }
+
+    #auth input{
+      width:100%;padding:12px;margin:6px 0;
+      border:none;border-radius:10px;
+      background:rgba(255,255,255,0.15);
+      color:#fff;
+    }
+
+    #auth button{
+      width:100%;padding:12px;margin-top:8px;
+      border:none;border-radius:10px;
+      cursor:pointer;font-weight:bold;
+    }
+
+    #register{background:#22c55e;}
+    #login{background:#3b82f6;}
+
+    #app{
+      display:none;
+      width:1100px;height:700px;
+      border-radius:18px;
+      overflow:hidden;
+      flex-direction:row;
+      background:rgba(255,255,255,0.06);
+    }
+
+    #sidebar{
+      width:35%;
+      border-right:1px solid rgba(255,255,255,0.1);
+      overflow-y:auto;
+      padding:10px;
+    }
+
+    .chatItem{
+      padding:10px;
+      margin:6px 0;
+      border-radius:10px;
+      cursor:pointer;
+      background:rgba(255,255,255,0.06);
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+    }
+
+    .chatItem:hover{
+      background:rgba(255,255,255,0.15);
+    }
+
+    .badge{
+      background:red;
+      color:#fff;
+      min-width:18px;
+      height:18px;
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:11px;
+      padding:2px;
+    }
+
+    #chat{
+      width:65%;
+      display:flex;
+      flex-direction:column;
+    }
+
+    #topbar{
+      padding:12px;
+      background:rgba(0,0,0,0.35);
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+    }
+
+    #messages{
+      flex:1;
+      padding:12px;
+      overflow-y:auto;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+
+    .msg{
+      max-width:70%;
+      padding:10px;
+      border-radius:14px;
+      word-wrap:break-word;
+    }
+
+    .me{align-self:flex-end;background:#2563eb;}
+    .other{align-self:flex-start;background:rgba(255,255,255,0.15);}
+
+    .time{font-size:10px;opacity:.6;margin-top:4px;}
+
+    #inputBox{
+      display:flex;
+      padding:10px;
+      gap:8px;
+      background:rgba(0,0,0,0.35);
+    }
+
+    #input{
+      flex:1;
+      padding:10px;
+      border:none;
+      border-radius:10px;
+      background:rgba(255,255,255,0.15);
+      color:#fff;
+    }
+
+    #send{
+      padding:10px 14px;
+      border:none;
+      border-radius:10px;
+      background:#22c55e;
+      color:#fff;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="auth">
+  <h3>Chatting Zone</h3>
+  <input id="nick" placeholder="Nickname">
+  <input id="email" placeholder="Email">
+  <input id="pass" type="password" placeholder="Password">
+  <button id="register">Create Account</button>
+  <button id="login">Login</button>
+</div>
+
+<div id="app">
+  <div id="sidebar"></div>
+
+  <div id="chat">
+    <div id="topbar">
+      <div id="chatName">Select chat</div>
+
+      <button id="logoutBtn" style="
+        background:red;
+        color:#fff;
+        border:none;
+        padding:6px 10px;
+        border-radius:8px;
+        cursor:pointer;
+      ">
+        Logout
+      </button>
+    </div>
+
+    <div id="messages"></div>
+
+    <div id="inputBox">
+      <input id="input" placeholder="Message...">
+      <button id="send">Send</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import {
+  getDatabase, ref, set, push, onValue, onChildAdded
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import {
+  getAuth, createUserWithEmailAndPassword,
+  signInWithEmailAndPassword, onAuthStateChanged,
+  signOut, updateProfile
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAxgfUilhG5BgI4PK4d2n1w3gdPopdf8S8",
+  authDomain: "messenger-cc9b0.firebaseapp.com",
+  databaseURL: "https://messenger-cc9b0-default-rtdb.firebaseio.com",
+  projectId: "messenger-cc9b0",
+  storageBucket: "messenger-cc9b0.firebasestorage.app",
+  messagingSenderId: "718667910457",
+  appId: "1:718667910457:web:d303969bce6e0a30c6ece8",
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const auth = getAuth(app);
+
+const sidebar = document.getElementById("sidebar");
+const messages = document.getElementById("messages");
+const input = document.getElementById("input");
+const chatName = document.getElementById("chatName");
+
+let me=null;
+let active=null;
+let unsub=null;
+let typingRef=null;
+
+const chatId=(a,b)=>[a,b].sort().join("_");
+
+const escape=(s="")=>
+  s.replaceAll("&","&amp;")
+   .replaceAll("<","&lt;")
+   .replaceAll(">","&gt;");
+
+/* =========================
+   🔥 UPGRADED REGISTER
+========================= */
+document.getElementById("register").onclick = async () => {
+  const email=document.getElementById("email").value.trim();
+  const pass=document.getElementById("pass").value.trim();
+  const nick=document.getElementById("nick").value.trim();
+
+  if(!email||!pass||!nick){
+    alert("Please fill all fields");
+    return;
+  }
+
+  try{
+    const cred=await createUserWithEmailAndPassword(auth,email,pass);
+
+    await updateProfile(cred.user,{displayName:nick});
+
+    await set(ref(db,"users/"+cred.user.uid),{
+      name:nick,
+      email,
+      online:true,
+      createdAt:Date.now()
+    });
+
+    alert("Account created!");
+  }catch(err){
+    alert(err.message);
+  }
+};
+
+/* =========================
+   🔥 UPGRADED LOGIN
+========================= */
+document.getElementById("login").onclick = async () => {
+  const email=document.getElementById("email").value.trim();
+  const pass=document.getElementById("pass").value.trim();
+
+  if(!email||!pass){
+    alert("Enter email & password");
+    return;
+  }
+
+  try{
+    const cred=await signInWithEmailAndPassword(auth,email,pass);
+
+    await set(ref(db,"users/"+cred.user.uid),{
+      name:cred.user.displayName||email,
+      email,
+      online:true,
+      lastLogin:Date.now()
+    });
+
+    alert("Login successful!");
+  }catch(err){
+    alert(err.message);
+  }
+};
+
+/* AUTH STATE */
+onAuthStateChanged(auth,user=>{
+  if(!user) return;
+
+  me=user;
+
+  set(ref(db,"users/"+user.uid),{
+    name:user.displayName||user.email,
+    email:user.email,
+    online:true,
+    lastSeen:Date.now()
+  });
+
+  document.getElementById("auth").style.display="none";
+  document.getElementById("app").style.display="flex";
+
+  loadChats();
+});
+
+/* USERS */
+function loadChats(){
+  onValue(ref(db,"users"), snap=>{
+    sidebar.innerHTML="";
+
+    const global=document.createElement("div");
+    global.className="chatItem";
+    global.innerHTML="🌍 Global Chat";
+    global.onclick=openGlobal;
+    sidebar.appendChild(global);
+
+    const users=snap.val()||{};
+
+    Object.entries(users)
+      .filter(([uid])=>uid!==me.uid)
+      .forEach(([uid,u])=>{
+
+        onValue(ref(db,"userChats/"+me.uid+"/"+uid), badgeSnap=>{
+
+          const data=badgeSnap.val()||{};
+
+          let div=document.getElementById("user_"+uid);
+
+          if(!div){
+            div=document.createElement("div");
+            div.className="chatItem";
+            div.id="user_"+uid;
+
+            div.onclick=()=>openChat(uid,u.name||u.email);
+            sidebar.appendChild(div);
+          }
+
+          div.innerHTML=`
+            <div>
+              ${u.name||u.email}
+              <div style="font-size:11px;opacity:.7">
+                ${data.lastMessage||""}
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="width:8px;height:8px;border-radius:50%;
+                background:${u.online?'#22c55e':'gray'};"></span>
+
+              <div class="badge">
+                ${data.unread>0?data.unread:""}
+              </div>
+            </div>
+          `;
+        });
+      });
+  });
+}
+
+/* GLOBAL CHAT */
+function openGlobal(){
+  active={uid:"GLOBAL",name:"Global Chat"};
+  chatName.textContent="🌍 Global Chat";
+  messages.innerHTML="";
+
+  if(unsub) unsub();
+
+  unsub=onChildAdded(ref(db,"global/messages"),snap=>{
+    const m=snap.val();
+
+    const div=document.createElement("div");
+    div.className="msg "+(m.uid===me.uid?"me":"other");
+
+    div.innerHTML=`
+      <div style="font-size:12px;opacity:.8;margin-bottom:4px;">
+        ${m.name||"Unknown"}
+      </div>
+
+      <div>${escape(m.text)}</div>
+
+      <div class="time">
+        ${new Date(m.time).toLocaleTimeString()}
+      </div>
+    `;
+
+    messages.appendChild(div);
+    messages.scrollTop=messages.scrollHeight;
+  });
+}
+
+/* PRIVATE CHAT */
+function openChat(uid,name){
+  active={uid,name};
+  chatName.textContent=name;
+  messages.innerHTML="";
+
+  set(ref(db,"userChats/"+me.uid+"/"+uid+"/unread"),0);
+
+  if(unsub) unsub();
+
+  const path="chats/"+chatId(me.uid,uid)+"/messages";
+
+  unsub=onChildAdded(ref(db,path),snap=>{
+    const m=snap.val();
+
+    const div=document.createElement("div");
+    div.className="msg "+(m.uid===me.uid?"me":"other");
+
+    div.innerHTML=`
+      <div>${escape(m.text)}</div>
+      <div class="time">
+        ${new Date(m.time).toLocaleTimeString()}
+        ${m.seen?" ✔✔":""}
+      </div>
+    `;
+
+    messages.appendChild(div);
+    messages.scrollTop=messages.scrollHeight;
+  });
+}
+
+/* SEND */
+function send(){
+  if(!active||!input.value.trim())return;
+
+  const text=input.value.trim();
+  const time=Date.now();
+
+  const msg={
+    uid:me.uid,
+    text,
+    time,
+    name:me.displayName||me.email
+  };
+
+  if(active.uid==="GLOBAL"){
+    push(ref(db,"global/messages"),msg);
+  } else {
+    const cid=chatId(me.uid,active.uid);
+
+    push(ref(db,"chats/"+cid+"/messages"),msg);
+
+    set(ref(db,"userChats/"+me.uid+"/"+active.uid),{
+      name:active.name,
+      lastMessage:text,
+      lastTime:time,
+      unread:0
+    });
+
+    onValue(ref(db,"userChats/"+active.uid+"/"+me.uid),snap=>{
+      const cur=snap.val()||{};
+
+      set(ref(db,"userChats/"+active.uid+"/"+me.uid),{
+        name:me.displayName||me.email,
+        lastMessage:text,
+        lastTime:time,
+        unread:(cur.unread||0)+1
+      });
+    },{onlyOnce:true});
+  }
+
+  input.value="";
+}
+
+document.getElementById("send").onclick=send;
+
+input.addEventListener("keydown",e=>{
+  if(e.key==="Enter")send();
+});
+
+/* LOGOUT FIXED */
+document.getElementById("logoutBtn").addEventListener("click",async()=>{
+  if(!me) return;
+
+  await set(ref(db,"users/"+me.uid+"/online"),false);
+  await signOut(auth);
+});
+</script>
+
+</body>
+</html>
