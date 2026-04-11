@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Messenger with Nickname</title>
+  <style>
+    body { font-family: Arial; background: #f0f2f5; }
+
+    #auth, #chat { width: 400px; margin: 40px auto; }
+
+    #auth {
+      background: white; padding: 20px; border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    }
+
+    #auth input { width: 100%; padding: 10px; margin: 5px 0; }
+
+    #auth button {
+      width: 100%; padding: 10px; margin-top: 5px;
+      background: #0084ff; color: white; border: none; cursor: pointer;
+    }
+
+    #chat {
+      display: none;
+      height: 500px;
+      background: white;
+      border-radius: 10px;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    }
+
+    #messages { flex: 1; padding: 10px; overflow-y: auto; }
+
+    .msg {
+      padding: 8px 12px;
+      margin: 5px;
+      border-radius: 15px;
+      max-width: 70%;
+      font-size: 14px;
+      word-wrap: break-word;
+    }
+
+    .me { background: #0084ff; color: white; margin-left: auto; }
+    .other { background: #e4e6eb; }
+
+    .time { display: block; font-size: 10px; opacity: 0.7; margin-top: 3px; }
+
+    #inputBox { display: flex; border-top: 1px solid #ccc; }
+
+    #inputBox input {
+      flex: 1; padding: 10px; border: none; outline: none;
+    }
+
+    #inputBox button {
+      background: #0084ff; color: white; border: none;
+      padding: 10px 15px;
+    }
+
+    #topBar {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px;
+      background: #0084ff;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+
+<div id="auth">
+  <h3>Login / Register</h3>
+  <input type="text" id="nickname" placeholder="Nickname (required for register)">
+  <input type="email" id="email" placeholder="Email">
+  <input type="password" id="password" placeholder="Password">
+  <button onclick="register()">Register</button>
+  <button onclick="login()">Login</button>
+</div>
+
+<div id="chat">
+  <div id="topBar">
+    <span id="userName"></span>
+    <button onclick="logout()">Logout</button>
+  </div>
+
+  <div id="messages"></div>
+
+  <div id="inputBox">
+    <input type="text" id="messageInput" placeholder="Type a message...">
+    <button onclick="sendMessage()">Send</button>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, push, onChildAdded } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut,
+  updateProfile
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAxgfUilhG5BgI4PK4d2n1w3gdPopdf8S8",
+  authDomain: "messenger-cc9b0.firebaseapp.com",
+  databaseURL: "https://messenger-cc9b0-default-rtdb.firebaseio.com",
+  projectId: "messenger-cc9b0",
+  storageBucket: "messenger-cc9b0.firebasestorage.app",
+  messagingSenderId: "718667910457",
+  appId: "1:718667910457:web:d303969bce6e0a30c6ece8",
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const auth = getAuth(app);
+
+const messagesRef = ref(db, "messages");
+let currentUser = null;
+
+// REGISTER
+window.register = async function () {
+  const nickname = document.getElementById("nickname").value.trim();
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+
+  if (!nickname) return alert("Please enter a nickname");
+
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+
+    await updateProfile(cred.user, {
+      displayName: nickname
+    });
+
+  } catch (err) {
+    alert(err.message);
+  }
+};
+
+// LOGIN
+window.login = function () {
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+
+  signInWithEmailAndPassword(auth, email, password)
+    .catch(err => alert(err.message));
+};
+
+// LOGOUT
+window.logout = function () {
+  signOut(auth);
+};
+
+// AUTH STATE
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    currentUser = user;
+
+    const name = user.displayName || user.email;
+
+    document.getElementById("auth").style.display = "none";
+    document.getElementById("chat").style.display = "flex";
+    document.getElementById("userName").textContent = name;
+
+  } else {
+    currentUser = null;
+    document.getElementById("auth").style.display = "block";
+    document.getElementById("chat").style.display = "none";
+  }
+});
+
+// SEND MESSAGE
+window.sendMessage = function () {
+  const input = document.getElementById("messageInput");
+  const text = input.value.trim();
+
+  if (!text || !currentUser) return;
+
+  push(messagesRef, {
+    uid: currentUser.uid,
+    name: currentUser.displayName || currentUser.email,
+    text: text,
+    time: Date.now()
+  });
+
+  input.value = "";
+};
+
+// ENTER KEY FIX (proper reference)
+document.getElementById("messageInput").addEventListener("keypress", (e) => {
+  if (e.key === "Enter") sendMessage();
+});
+
+// FORMAT TIME
+function formatTime(ts) {
+  return new Date(ts).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+// RECEIVE MESSAGES
+onChildAdded(messagesRef, (data) => {
+  const msg = data.val();
+
+  const div = document.createElement("div");
+  div.classList.add("msg");
+
+  const myName = currentUser?.displayName || currentUser?.email;
+
+  div.classList.add(msg.name === myName ? "me" : "other");
+
+  div.innerHTML = `
+    <strong>${msg.name}</strong>: ${msg.text}
+    <span class="time">${formatTime(msg.time)}</span>
+  `;
+
+  const messages = document.getElementById("messages");
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+});
+</script>
+
+</body>
+</html>
